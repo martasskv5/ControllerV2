@@ -1,15 +1,17 @@
 from typing import Any, Awaitable, Callable, Dict
 from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager
 from pycaw.pycaw import AudioUtilities, AudioSession
+from .base import Wrapper as PluginBase
 import re
 
-class MediaControllerPlugin:
+class Wrapper(PluginBase):
     """Plugin wrapper exposing MediaController actions as named handlers.
 
     Each plugin exposes an `actions` dict mapping action name -> async handler(msg) -> dict response.
     """
 
     def __init__(self):
+        # super().__init__(server)
         self.name = "mediacontroller"
         self.prefix = "mc_"
         self.mc = MediaController()

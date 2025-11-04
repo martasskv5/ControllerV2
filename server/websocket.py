@@ -2,10 +2,51 @@
 import asyncio
 import json
 import websockets
+import pkgutil
+import importlib
+import inspect
 from typing import Dict
 
 # plugin wrappers
-from plugins.mediacontroller_plugin import MediaControllerPlugin
+# from plugins.mediacontroller_plugin import MediaControllerPlugin
+
+def load_plugins(package_name: str = "plugins"):
+    plugins = []
+    try:
+        package = importlib.import_module(package_name)
+    except Exception as e:
+        print(f"plugin discovery: failed to import package '{package_name}': {e}")
+        return plugins
+
+    try:
+        pkg_path = package.__path__
+    except AttributeError:
+        print(f"plugin discovery: package '{package_name}' has no __path__")
+        return plugins
+
+    for finder, name, ispkg in pkgutil.iter_modules(pkg_path):
+        if name.startswith("_"):
+            continue
+        module_name = f"{package_name}.{name}"
+        print(f"plugin discovery: trying to load {module_name}")
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as e:
+            print(f"plugin discovery: failed to import {module_name}: {e}")
+            continue
+
+        # require a class named Wrapper in the module
+        WrapperCls = getattr(module, "Wrapper", None)
+        if isinstance(WrapperCls, type):
+            try:
+                inst = WrapperCls()
+            except Exception as e:
+                print(f"plugin instantiation failed for {module_name}.Wrapper: {e}")
+                continue
+            if hasattr(inst, "actions") and isinstance(inst.actions, dict):
+                plugins.append(inst)
+
+    return plugins
 
 
 class WebSocketServer:
@@ -19,7 +60,7 @@ class WebSocketServer:
         self.port = port
         self.connected_clients = set()
         # register plugins here; to add a new plugin, append an instance
-        self.plugins = [MediaControllerPlugin()]
+        self.plugins = load_plugins()
 
     async def handler(self, websocket):
         # Register client

@@ -1,0 +1,83 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "MediaController plugin message schema",
+	"description": "JSON request and response schema for the mediacontroller plugin used by the WebSocket server",
+	"type": "object",
+	"oneOf": [
+		{
+			"description": "List sessions request",
+			"properties": {
+				"action": { "const": "list" }
+			},
+			"required": ["action"],
+			"additionalProperties": false
+		},
+		{
+			"description": "Set volume request",
+			"properties": {
+				"action": { "const": "set_volume" },
+				"id": {
+					"anyOf": [
+						{ "type": "string" },
+						{ "type": "null" }
+					]
+				},
+				"level": {
+					"type": "number",
+					"minimum": 0,
+					"maximum": 100,
+					"description": "Accepts 0.0-1.0 (normalized) or 0-100 (percentage). Values >1 are treated as percentages."
+				}
+			},
+			"required": ["action", "level"],
+			"additionalProperties": false
+		},
+		{
+			"description": "Playback control requests (play/pause/next/previous)",
+			"properties": {
+				"action": { "enum": ["play", "pause", "next", "previous"] },
+				"id": {
+					"anyOf": [
+						{ "type": "string" },
+						{ "type": "null" }
+					]
+				}
+			},
+			"required": ["action"],
+			"additionalProperties": false
+		}
+	],
+	"$defs": {
+		"response": {
+			"type": "object",
+			"properties": {
+				"ok": { "type": "boolean" },
+				"error": { "type": "string" }
+			},
+			"required": ["ok"],
+			"additionalProperties": true
+		},
+		"session": {
+			"type": "object",
+			"properties": {
+				"id": { "type": "string" },
+				"title": { "type": ["string", "null"] },
+				"artist": { "type": ["string", "null"] },
+				"album": { "type": ["string", "null"] },
+				"is_playing": { "type": "boolean" },
+				"status": { "type": ["string", "null"] },
+				"source": { "type": ["string", "null"] },
+				"volume": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 }
+			},
+			"required": ["id"],
+			"additionalProperties": true
+		}
+	},
+	"examples": [
+		{ "action": "list" },
+		{ "action": "set_volume", "id": "12345", "level": 50 },
+		{ "action": "set_volume", "id": null, "level": 0.3 },
+		{ "action": "play", "id": "current" }
+	]
+}
+

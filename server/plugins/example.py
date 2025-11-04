@@ -1,6 +1,7 @@
 from typing import Any, Dict
+from .base import Wrapper as PluginBase
 
-class YourPlugin:
+class Wrapper(PluginBase):
     def __init__(self):
         self.name = "yourplugin"
         self.actions = {
