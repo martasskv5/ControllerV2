@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Keyboard plugin message schema",
+  "description": "JSON request and response schema for the keyboard plugin used by the WebSocket server",
+  "type": "object",
+  "oneOf": [
+    {
+      "description": "Press key request",
+      "properties": {
+        "action": { "const": "k_press" },
+        "key": { "type": "string" },
+        "repeat": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "required": ["action", "key"],
+      "additionalProperties": false
+    },
+    {
+      "description": "Hold key request (press and keep held)",
+      "properties": {
+        "action": { "const": "k_hold" },
+        "key": { "type": "string" }
+      },
+      "required": ["action", "key"],
+      "additionalProperties": false
+    },
+    {
+      "description": "Release key request",
+      "properties": {
+        "action": { "const": "k_release" },
+        "key": { "type": "string" }
+      },
+      "required": ["action", "key"],
+      "additionalProperties": false
+    }
+  ],
+
+  "$defs": {
+    "okResponse": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["success"] },
+        "key_pressed": { "type": "string" },
+        "key_held": { "type": "string" },
+        "key_released": { "type": "string" }
+      },
+      "required": ["status"],
+      "additionalProperties": false
+    },
+    "errorResponse": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["error"] },
+        "message": { "type": "string" }
+      },
+      "required": ["status", "message"],
+      "additionalProperties": false
+    }
+  },
+
+  "examples": [
+    { "action": "k_press", "key": "NUM1" },
+    { "action": "k_hold", "key": "ENTER" },
+    { "action": "k_release", "key": "ENTER" }
+  ]
+}

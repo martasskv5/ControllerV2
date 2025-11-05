@@ -5,12 +5,25 @@ import websockets
 import pkgutil
 import importlib
 import inspect
+import threading
+import time
+import sys
+try:
+    import msvcrt
+except Exception:
+    msvcrt = None
 from typing import Dict
 
 # plugin wrappers
 # from plugins.mediacontroller_plugin import MediaControllerPlugin
 
-def load_plugins(package_name: str = "plugins"):
+def load_plugins(package_name: str = "plugins", server=None):
+    """Discover and instantiate plugins from the given package name.
+
+    Each plugin module should define a class named `Wrapper`. The constructor
+    may accept an optional server parameter. Returned plugins are instances
+    that expose an `actions` dict.
+    """
     plugins = []
     try:
         package = importlib.import_module(package_name)
@@ -39,7 +52,11 @@ def load_plugins(package_name: str = "plugins"):
         WrapperCls = getattr(module, "Wrapper", None)
         if isinstance(WrapperCls, type):
             try:
-                inst = WrapperCls()
+                # try server-aware constructor first
+                try:
+                    inst = WrapperCls(server)
+                except TypeError:
+                    inst = WrapperCls()
             except Exception as e:
                 print(f"plugin instantiation failed for {module_name}.Wrapper: {e}")
                 continue
@@ -107,10 +124,81 @@ class WebSocketServer:
         # run the websockets server inside an async context manager
         async with websockets.serve(self.handler, self.host, self.port):
             print(f"WebSocket command server started at ws://{self.host}:{self.port}")
-            # keep running until cancelled
-            await asyncio.Future()
+            # store running loop so background threads can schedule work
+            self.loop = asyncio.get_running_loop()
+            # create a future we can complete to stop the server
+            self._stop_future = self.loop.create_future()
+
+            # start keyboard watcher thread (Ctrl+R to reload plugins)
+            self._stop_event = threading.Event()
+            self._kbd_thread = threading.Thread(target=self._keyboard_watcher, daemon=True)
+            self._kbd_thread.start()
+
+            try:
+                await self._stop_future
+            finally:
+                # signal keyboard thread to stop and wait briefly
+                self._stop_event.set()
+                if self._kbd_thread.is_alive():
+                    self._kbd_thread.join(timeout=0.2)
+
+    def stop(self):
+        self.connected_clients.clear()
+        # stop the async run loop if running
+        try:
+            if hasattr(self, "loop") and hasattr(self, "_stop_future") and not self._stop_future.done():
+                self.loop.call_soon_threadsafe(self._stop_future.set_result, None)
+        except Exception:
+            pass
+        
+    def reload_plugins(self):
+        # synchronous reload (safe if called from main thread)
+        print("Reloading plugins...")
+        self.plugins = load_plugins(server=self)
+        print(f"Reloaded {len(self.plugins)} plugins")
+
+    def _do_reload(self):
+        # helper to be scheduled on the event loop
+        try:
+            self.reload_plugins()
+        except Exception as e:
+            print(f"plugin reload failed: {e}")
+
+    def _keyboard_watcher(self):
+        """Background thread that watches console keys and triggers reload on Ctrl+R.
+
+        Uses msvcrt on Windows; if unavailable, does nothing.
+        """
+        if msvcrt is None:
+            return
+        print("Keyboard watcher started (press Ctrl+R to reload plugins)")
+        while not getattr(self, "_stop_event", threading.Event()).is_set():
+            try:
+                if msvcrt.kbhit():
+                    ch = msvcrt.getwch()
+                    # Ctrl+R -> ASCII 18
+                    if ch and ord(ch) == 18:
+                        print("Ctrl+R detected -> scheduling plugin reload")
+                        try:
+                            # schedule reload on the asyncio loop
+                            if hasattr(self, "loop"):
+                                self.loop.call_soon_threadsafe(self._do_reload)
+                        except Exception as e:
+                            print(f"Failed to schedule reload: {e}")
+                else:
+                    time.sleep(0.05)
+            except Exception:
+                # swallow keyboard read errors and keep looping
+                time.sleep(0.1)
 
 
 if __name__ == "__main__":
-    srv = WebSocketServer()
-    srv.start()
+    try:
+        srv = WebSocketServer()
+        srv.start()
+    except Exception as e:
+        print(f"Error starting WebSocket server: {e}")
+    except KeyboardInterrupt:
+        print("WebSocket server stopped by user")
+        srv.stop()
+    
