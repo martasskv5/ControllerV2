@@ -39,6 +39,7 @@ pip install websockets winrt pycaw comtypes
 - `server/MediaController.py` - core logic that talks to Windows (GSMA) and pycaw. Contains helpers to list sessions and set volume.
 - `server/websocket.py` - WebSocket JSON command server. Delegates commands to plugin(s).
 - `server/plugins/mediacontroller_plugin.py` - plugin wrapper exposing MediaController actions as command handlers.
+- `server/plugins/keyboard_plugin.py` - plugin wrapper exposing keyboard key press/hold/release actions.
 - `server/main.py` - simple demo/test harness for MediaController.
 
 
@@ -64,25 +65,29 @@ Send JSON messages (one object per message). Server replies with a JSON response
 Supported commands (via the `mediacontroller` plugin):
 
 - List sessions
-  - Request: `{ "action": "list" }`
+  - Request: `{ "action": "mc_list" }`
   - Response: `{ "ok": true, "sessions": [ { "id": "...", "title": "...", "artist": "...", "volume": 0.5, ... }, ... ] }`
 
 - Set volume
-  - Request: `{ "action": "set_volume", "id": "<session id>|current|null", "level": 0.5 }`
+  - Request: `{ "action": "mc_set_volume", "id": "<session id>|current|null", "level": 0.5 }`
     - `level` accepts `0.0-1.0` or `0-100` (percentage) and is normalized to `0.0-1.0`.
   - Response: `{ "ok": true }` or `{ "ok": false, "error": "..." }`
 
 - Playback control
-  - Play: `{ "action": "play", "id": "<session id>|current" }`
-  - Pause: `{ "action": "pause", "id": "<session id>|current" }`
-  - Next: `{ "action": "next", "id": "<session id>|current" }` (id optional)
-  - Previous: `{ "action": "previous", "id": "<session id>|current" }`
+  - Play: `{ "action": "mc_play", "id": "<session id>|current" }`
+  - Pause: `{ "action": "mc_pause", "id": "<session id>|current" }`
+  - Next: `{ "action": "mc_next", "id": "<session id>|current" }` (id optional)
+  - Previous: `{ "action": "mc_previous", "id": "<session id>|current" }`
   - Response: `{ "ok": true }` or `{ "ok": false, "error": "..." }`
 
 Notes:
 - You can use `"id": "current"` or omit `id` to target the current session returned by the system.
 - The `list` response includes a `session`-like object filtered to JSON-serializable fields. Use the `id` value for subsequent commands.
 
+Supported commands (via the `keyboard` plugin):
+- Press key: `{ "action": "k_press", "key": "<key>" }`
+- Hold key: `{ "action": "k_hold", "key": "<key>" }`
+- Release key: `{ "action": "k_release", "key": "<key>" }`
 
 ## Client examples
 

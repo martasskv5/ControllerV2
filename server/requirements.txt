@@ -1,0 +1,12 @@
+# Requirements for ControllerV2 server
+# Core runtime dependencies
+websockets>=10.0
+winrt-Windows.Media>=3.2.1
+pycaw>=20181226
+comtypes>=1.1.10
+
+# Keyboard plugin dependency (may be optional depending on which plugins you use)
+pyKey>=0.2.0
+
+# Optional tooling
+jsonschema>=4.0.0    # if you want to validate incoming messages against JSON Schema
