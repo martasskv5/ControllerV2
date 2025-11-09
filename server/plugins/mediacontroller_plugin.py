@@ -3,6 +3,8 @@ from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessio
 from pycaw.pycaw import AudioUtilities, AudioSession
 from .base import Wrapper as PluginBase
 import re
+import json
+import asyncio
 
 class Wrapper(PluginBase):
     """Plugin wrapper exposing MediaController actions as named handlers.
@@ -10,11 +12,12 @@ class Wrapper(PluginBase):
     Each plugin exposes an `actions` dict mapping action name -> async handler(msg) -> dict response.
     """
 
-    def __init__(self):
+    def __init__(self, server=None):
         # super().__init__(server)
         self.name = "mediacontroller"
         self.prefix = "mc_"
         self.mc = MediaController()
+        self.server = server
         # map action name to handler coroutine
         self.actions: Dict[str, Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = {
             "mc_list": self.list_handler,
@@ -24,8 +27,22 @@ class Wrapper(PluginBase):
             "mc_next": self.next_handler,
             "mc_previous": self.previous_handler,
         }
+        self.broadcast = {}
+        
+        # Server reference stored for later use
+        self.server = server
+        self._monitoring_started = False
+        # Store event tokens to prevent garbage collection
+        self._event_tokens = []
+        # Last known state to prevent duplicate broadcasts
+        self._last_state = None
 
     async def list_handler(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+        # Start monitoring if not already started and server is running
+        if not self._monitoring_started and self.server and hasattr(self.server, 'loop'):
+            self._monitoring_started = True
+            await self._setup_session_monitoring()
+            
         ml = await self.mc.get_media_list()
         safe = []
         for i in ml:
@@ -69,6 +86,100 @@ class Wrapper(PluginBase):
         if hasattr(id_or_none, "try_get_media_properties_async"):
             return id_or_none
         return await self.mc.resolve_session(id_or_none)
+
+    async def _setup_session_monitoring(self):
+        """Set up event listeners for media session changes."""
+        try:
+            mgr = await self.mc.get_manager()
+            
+            # Subscribe to session changes
+            token = mgr.add_current_session_changed(self._on_current_session_changed)
+            self._event_tokens.append(token)
+            token = mgr.add_sessions_changed(self._on_sessions_changed)
+            self._event_tokens.append(token)
+            
+            # Monitor each existing session
+            for session in mgr.get_sessions():
+                await self._setup_session_listeners(session)
+                
+            print("Media session monitoring started")
+            # Initial state broadcast
+            await self._broadcast_media_list()
+        except Exception as e:
+            print(f"Failed to set up media session monitoring: {e}")
+    
+    async def _setup_session_listeners(self, session):
+        """Set up event listeners for an individual session."""
+        try:
+            if not session:
+                return
+                
+            # Get initial properties to ensure the session is valid
+            try:
+                await session.try_get_media_properties_async()
+            except Exception:
+                print("Skipping invalid session")
+                return
+                
+            token = session.add_media_properties_changed(self._on_media_properties_changed)
+            self._event_tokens.append(token)
+            token = session.add_playback_info_changed(self._on_playback_info_changed)
+            self._event_tokens.append(token)
+            print(f"Set up listeners for session: {getattr(session, 'source_app_user_model_id', 'unknown')}")
+        except Exception as e:
+            print(f"Failed to set up session listeners: {e}")
+
+    def _on_current_session_changed(self, mgr, args):
+        """Handler for when the current media session changes."""
+        if self.server and hasattr(self.server, "loop"):
+            asyncio.run_coroutine_threadsafe(self._broadcast_media_list(), self.server.loop)
+
+    def _on_sessions_changed(self, mgr, args):
+        """Handler for when the available sessions list changes."""
+        if self.server and hasattr(self.server, "loop"):
+            async def handle_sessions_changed():
+                # Set up listeners for any new sessions
+                for session in mgr.get_sessions():
+                    await self._setup_session_listeners(session)
+                await self._broadcast_media_list()
+            
+            asyncio.run_coroutine_threadsafe(handle_sessions_changed(), self.server.loop)
+
+    def _on_media_properties_changed(self, session, args):
+        """Handler for when media properties (title, artist, etc.) change."""
+        if self.server and hasattr(self.server, "loop"):
+            asyncio.run_coroutine_threadsafe(self._broadcast_media_list(), self.server.loop)
+
+    def _on_playback_info_changed(self, session, args):
+        """Handler for when playback status changes."""
+        if self.server and hasattr(self.server, "loop"):
+            asyncio.run_coroutine_threadsafe(self._broadcast_media_list(), self.server.loop)
+
+    async def _broadcast_media_list(self):
+        """Send updated media list to all connected clients."""
+        if not self.server:
+            return
+            
+        try:
+            # Get current media list
+            result = await self.list_handler({})
+            if result.get("ok"):
+                # Check if state actually changed
+                current_state = json.dumps(result, sort_keys=True)
+                if current_state == self._last_state:
+                    return
+                self._last_state = current_state
+                
+                msg_str = json.dumps(result)
+                for client in self.server.connected_clients:
+                    try:
+                        await client.send(msg_str)
+                    except Exception:
+                        # Ignore failed sends to individual clients
+                        pass
+                print("Broadcasted media update")
+        except Exception as e:
+            print(f"Failed to broadcast media list: {e}")
 
 class MediaController:
 

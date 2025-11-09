@@ -21,8 +21,8 @@ def load_plugins(package_name: str = "plugins", server=None):
     """Discover and instantiate plugins from the given package name.
 
     Each plugin module should define a class named `Wrapper`. The constructor
-    may accept an optional server parameter. Returned plugins are instances
-    that expose an `actions` dict.
+    will be passed the server instance to enable plugin-server communication.
+    Returned plugins are instances that expose an `actions` dict.
     """
     plugins = []
     try:
@@ -77,11 +77,18 @@ class WebSocketServer:
         self.port = port
         self.connected_clients = set()
         # register plugins here; to add a new plugin, append an instance
-        self.plugins = load_plugins()
+        self.plugins = load_plugins(server=self)
 
     async def handler(self, websocket):
         # Register client
         self.connected_clients.add(websocket)
+        print(f"Client connected: {websocket.remote_address}")
+        # Try send media list on connect
+        try:
+            resp = await self.handle_command({"action": "mc_list"})
+            await websocket.send(json.dumps(resp))
+        except Exception as e:
+            print(f"Failed to send media list on connect: {e}")
         try:
             async for raw in websocket:
                 try:
