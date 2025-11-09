@@ -1,10 +1,11 @@
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable, Dict, Optional
 from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager
 from pycaw.pycaw import AudioUtilities, AudioSession
 from .base import Wrapper as PluginBase
 import re
 import json
 import asyncio
+import hashlib
 
 class Wrapper(PluginBase):
     """Plugin wrapper exposing MediaController actions as named handlers.
@@ -26,9 +27,7 @@ class Wrapper(PluginBase):
             "mc_pause": self.pause_handler,
             "mc_next": self.next_handler,
             "mc_previous": self.previous_handler,
-        }
-        self.broadcast = {}
-        
+        }        
         # Server reference stored for later use
         self.server = server
         self._monitoring_started = False
@@ -36,28 +35,55 @@ class Wrapper(PluginBase):
         self._event_tokens = []
         # Last known state to prevent duplicate broadcasts
         self._last_state = None
+        # Cache mapping stable id -> session object
+        self._session_cache = {}
+        
+    def format_message(self, ok: bool, error: Optional[str] = None, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        if data is None:
+            data = {}
+        message = {
+            "ok": ok,
+            "type": self.name,
+            **({"error": error} if error is not None else {}),
+            **data
+        }
+        return message
 
     async def list_handler(self, msg: Dict[str, Any]) -> Dict[str, Any]:
         # Start monitoring if not already started and server is running
         if not self._monitoring_started and self.server and hasattr(self.server, 'loop'):
             self._monitoring_started = True
             await self._setup_session_monitoring()
-            
+        
         ml = await self.mc.get_media_list()
         safe = []
+        # rebuild session cache for fresh session objects
+        self._session_cache.clear()
         for i in ml:
+            sess = i.get("session")
+            source = (i.get("source") or "") or ""
+            title = (i.get("title") or "") or ""
+            artist = (i.get("artist") or "") or ""
+            album = (i.get("album") or "") or ""
+            key = f"{source}|{title}|{artist}|{album}"
+            sid = hashlib.sha1(key.encode("utf-8")).hexdigest()
+            # store mapping to the session object for later commands
+            if sess:
+                self._session_cache[sid] = sess
+
             s = {k: v for k, v in i.items() if k != "session"}
+            s["id"] = sid
             safe.append(s)
-        return {"ok": True, "sessions": safe}
+        return self.format_message(True, data={"sessions": safe})
 
     async def set_volume_handler(self, msg: Dict[str, Any]) -> Dict[str, Any]:
         level = msg.get("level")
         sid = msg.get("id", None)
         s = await self._resolve_session_for_command(sid)
         if s is None:
-            return {"ok": False, "error": "session_not_found"}
+            return self.format_message(False, error="session_not_found")
         success = self.mc.try_set_volume(s, level)
-        return {"ok": bool(success)}
+        return self.format_message(bool(success))
 
     async def play_handler(self, msg: Dict[str, Any]) -> Dict[str, Any]:
         return await self._call_simple_action(msg, self.mc.try_play)
@@ -75,17 +101,45 @@ class Wrapper(PluginBase):
         sid = msg.get("id", None)
         s = await self._resolve_session_for_command(sid)
         if s is None:
-            return {"ok": False, "error": "session_not_found"}
+            return self.format_message(False, error="session_not_found")
         # action_callable may be async
         await action_callable(s)
-        return {"ok": True}
+        return self.format_message(True)
 
     async def _resolve_session_for_command(self, id_or_none):
         if id_or_none is None or id_or_none == "current":
             return await self.mc.resolve_session(None)
         if hasattr(id_or_none, "try_get_media_properties_async"):
             return id_or_none
-        return await self.mc.resolve_session(id_or_none)
+        # First try our cache (stable ids)
+        if isinstance(id_or_none, str) and id_or_none in self._session_cache:
+            return self._session_cache[id_or_none]
+
+        # Fallback: try lookup by hashed id produced earlier (legacy behavior)
+        mgr = await self.mc.get_manager()
+        for s in mgr.get_sessions():
+            try:
+                if str(hash(s)) == str(id_or_none):
+                    return s
+            except Exception:
+                continue
+
+        # As a last resort, try to resolve by matching source or title tokens
+        try:
+            for s in mgr.get_sessions():
+                try:
+                    props = await s.try_get_media_properties_async()
+                except Exception:
+                    continue
+                source = getattr(s, "source_app_user_model_id", "") or ""
+                title = getattr(props, "title", "") or ""
+                candidate_key = f"{source}|{title}|"
+                if isinstance(id_or_none, str) and id_or_none in candidate_key:
+                    return s
+        except Exception:
+            pass
+
+        return None
 
     async def _setup_session_monitoring(self):
         """Set up event listeners for media session changes."""

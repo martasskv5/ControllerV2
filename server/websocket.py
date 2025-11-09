@@ -93,6 +93,7 @@ class WebSocketServer:
             async for raw in websocket:
                 try:
                     msg = json.loads(raw)
+                    print(f"Received message: {msg}")
                 except Exception:
                     await websocket.send(json.dumps({"ok": False, "error": "invalid_json"}))
                     continue
@@ -117,9 +118,13 @@ class WebSocketServer:
             handler = p.actions.get(action)
             if handler:
                 try:
-                    return await handler(msg)
+                    res = await handler(msg)
+                    # ensure response includes plugin type so clients can route messages
+                    if isinstance(res, dict):
+                        res.setdefault("type", getattr(p, "name", ""))
+                    return res
                 except Exception as e:
-                    return {"ok": False, "error": str(e)}
+                    return {"ok": False, "error": str(e), "type": getattr(p, "name", "")}
 
         return {"ok": False, "error": "unknown_action"}
 
