@@ -1,0 +1,104 @@
+<main class="media-page" id="main-content">
+    <section class="top-panel glass-surface">
+        <div class="visualizer" aria-hidden="true">
+            @for (bar of visualizerBars(); track $index) {
+                <span [style.transform]="'scaleY(' + bar + ')'" ></span>
+            }
+        </div>
+
+        <div class="top-panel-content">
+        <div class="label-row">
+            <span class="eyebrow">Now Playing</span>
+            @if (nowPlaying(); as playing) {
+                <span class="status">{{ playing.is_playing ? 'Live' : 'Idle' }}</span>
+            }
+        </div>
+        @if (nowPlaying(); as playing) {
+            <h1>{{ playing.title ?? 'No active audio source' }}</h1>
+            <p>
+                {{ playing.artist ?? 'Unknown artist' }}
+                {{ playing.album ? ' - ' + playing.album : '' }}
+            </p>
+        }
+
+        <div class="control-bar">
+            <div class="active-target">
+                <span>Controlling</span>
+                @if (selectedSession(); as active) {
+                    <strong>{{ active.source ?? active.title ?? 'No source selected' }}</strong>
+                }
+            </div>
+
+            @if (selectedSession(); as active) {
+                <div class="transport" role="group" aria-label="Playback controls">
+                    <button type="button" (click)="handleAction({ action: 'mc_previous' })" aria-label="Previous track">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M18 6V18L8 12L18 6Z"></path>
+                            <rect x="5" y="6" width="2" height="12"></rect>
+                        </svg>
+                        <span class="sr-only">Previous</span>
+                    </button>
+                    <button type="button" class="play" (click)="handleAction({ action: active.is_playing ? 'mc_pause' : 'mc_play' })" [attr.aria-label]="active.is_playing ? 'Pause playback' : 'Start playback'">
+                        @if (active.is_playing) {
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <rect x="7" y="5" width="4" height="14"></rect>
+                                <rect x="13" y="5" width="4" height="14"></rect>
+                            </svg>
+                            <span class="sr-only">Pause</span>
+                        } @else {
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path d="M8 5V19L19 12L8 5Z"></path>
+                            </svg>
+                            <span class="sr-only">Play</span>
+                        }
+                    </button>
+                    <button type="button" (click)="handleAction({ action: 'mc_next' })" aria-label="Next track">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M6 6V18L16 12L6 6Z"></path>
+                            <rect x="17" y="6" width="2" height="12"></rect>
+                        </svg>
+                        <span class="sr-only">Next</span>
+                    </button>
+                </div>
+
+                <label class="volume" aria-label="Volume slider">
+                    <span>Volume</span>
+                    <input type="range" min="0" max="100" [value]="(active.volume ?? 0) * 100" (input)="handleSetVolume($any($event.target).value / 100)" />
+                    <strong>{{ active.volume != null ? (active.volume * 100).toFixed(0) : '0' }}%</strong>
+                </label>
+            }
+        </div>
+        </div>
+    </section>
+
+    <section class="sources-panel glass-surface">
+        <div class="list-header">
+            <h2>Sources</h2>
+            <p>Scroll to change the selected source.</p>
+        </div>
+
+        <div
+            #sourceList
+            class="source-list"
+            role="listbox"
+            aria-label="Audio sources"
+            tabindex="0"
+            (scroll)="handleListScroll()"
+        >
+            @for (m of orderedMediaList(); track m.id) {
+                <button
+                    type="button"
+                    role="option"
+                    class="source-card"
+                    [attr.data-session-id]="m.id"
+                    [attr.aria-selected]="m.id === selectedSessionId()"
+                    [class.selected]="m.id === selectedSessionId()"
+                    [class.playing]="m.is_playing"
+                    (click)="selectSession(m.id)"
+                >
+                    <app-mediapage-item [item]="m" [selectedSession]="selectedSessionId()"></app-mediapage-item>
+                </button>
+            }
+        </div>
+    </section>
+</main>

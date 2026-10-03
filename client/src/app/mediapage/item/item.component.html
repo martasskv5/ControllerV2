@@ -1,0 +1,13 @@
+<article class="media-card" [class.selected]="selectedSession() === item().id">
+    <header>
+        <h3>{{ item().title ?? 'No media title' }}</h3>
+        <p>{{ item().artist ?? 'Unknown artist' }}{{ item().album ? ' - ' + item().album : '' }}</p>
+    </header>
+
+    <footer>
+        <span class="source">{{ sourceName() }}</span>
+        <span class="state" [class.playing]="item().is_playing">
+            {{ item().is_playing ? 'Playing' : 'Available' }}
+        </span>
+    </footer>
+</article>

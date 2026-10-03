@@ -1,0 +1,57 @@
+.media-card {
+    display: grid;
+    gap: 0.56rem;
+    padding: 0.92rem;
+    border-radius: 1rem;
+    color: var(--app-text-main);
+
+    header {
+        display: grid;
+        gap: 0.2rem;
+    }
+
+    h3 {
+        margin: 0;
+        font-size: 0.96rem;
+        line-height: 1.25;
+        font-weight: 640;
+        letter-spacing: -0.01em;
+    }
+
+    p {
+        margin: 0;
+        color: var(--app-text-muted);
+        font-size: 0.83rem;
+        line-height: 1.25;
+    }
+
+    footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .source {
+        font-size: 0.75rem;
+        color: var(--app-text-muted);
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+
+    .state {
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--app-nav-text);
+        background: var(--app-card-bg);
+        border-radius: 999px;
+        padding: 0.2rem 0.58rem;
+    }
+
+    .state.playing {
+        color: var(--app-chip-playing-text);
+        background: var(--app-chip-playing-bg);
+    }
+}

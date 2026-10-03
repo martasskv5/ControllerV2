@@ -1,0 +1,56 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+}
+
+.shell {
+  min-height: 100dvh;
+  position: relative;
+}
+
+.glass-shell {
+  background: var(--app-shell-bg);
+  border: 1px solid var(--app-shell-border);
+  box-shadow: var(--app-shell-shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.settings-button {
+  position: fixed;
+  top: 0.9rem;
+  right: 0.9rem;
+  width: 2.8rem;
+  height: 2.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.95rem;
+  border: 1px solid var(--app-nav-border);
+  color: var(--app-nav-active-text);
+  background: var(--app-nav-active-bg);
+  text-decoration: none;
+  flex: 0 0 auto;
+
+  svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    fill: currentColor;
+  }
+}
+
+.shell-main {
+  min-height: 100dvh;
+  padding: 1rem;
+}
+
+@media (max-width: 760px) {
+  .shell-main {
+    padding: 0.75rem 0.75rem 6.5rem;
+  }
+
+  .settings-button {
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+}

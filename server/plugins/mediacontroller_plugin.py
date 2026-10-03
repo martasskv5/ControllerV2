@@ -1,6 +1,6 @@
 from typing import Any, Awaitable, Callable, Dict, Optional
 from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager
-from pycaw.pycaw import AudioUtilities, AudioSession
+from pycaw.pycaw import AudioUtilities, AudioSession, IAudioMeterInformation
 from .base import Wrapper as PluginBase
 import re
 import json
@@ -254,6 +254,7 @@ class MediaController:
             is_playing = (status is not None and status.name == "PLAYING") or (str(status).lower() == "playing")
             source = getattr(s, "source_app_user_model_id", None)
             vol = self.find_volume_for_session(s)
+            peak = self.find_meter_for_session(s)
             out.append({
                 "id": str(hash(s)),  # stable per-process run similar to GetHashCode()
                 "title": title,
@@ -263,9 +264,55 @@ class MediaController:
                 "status": str(status),
                 "source": source,
                 "volume": vol,
+                "audio_level": peak,
                 "session": s,  # keep session if you want to control it directly
             })
         return out
+
+    def find_meter_for_session(self, gsma_session):
+        """Best-effort match using pycaw AudioMeterInformation peak values."""
+        try:
+            source = (gsma_session.source_app_user_model_id or "") or ""
+            source = source.lower()
+
+            def norm(name: str) -> str:
+                if not name:
+                    return ""
+                n = name.lower()
+                n = re.sub(r"\.exe$", "", n)
+                n = re.sub(r"[^a-z0-9]+", " ", n)
+                return n.strip()
+
+            sessions: list[AudioSession] = AudioUtilities.GetAllSessions()
+            for sess in sessions:
+                try:
+                    proc = sess.Process
+                    proc_name = proc.name() if proc else ""
+                except Exception:
+                    proc_name = ""
+                display = (sess.DisplayName or "") or ""
+                proc_name_n = norm(proc_name)
+                display_n = norm(display)
+
+                matched = False
+                if proc_name_n and (proc_name_n in source or proc_name_n in display_n or proc_name_n in source.replace('.', ' ')):
+                    matched = True
+                if not matched and display_n and (display_n in source or display_n in proc_name_n):
+                    matched = True
+                if not matched and not source and proc_name_n and proc_name_n == display_n:
+                    matched = True
+
+                if matched:
+                    try:
+                        meter = sess._ctl.QueryInterface(IAudioMeterInformation)
+                        peak = meter.GetPeakValue()
+                        return max(0.0, min(1.0, float(peak)))
+                    except Exception:
+                        pass
+        except Exception:
+            print("Error finding audio meter for session")
+            pass
+        return None
 
     def find_volume_for_session(self, gsma_session):
         """Best-effort match using pycaw AudioUtilities.GetAllSessions()."""

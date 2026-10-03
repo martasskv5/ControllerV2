@@ -1,0 +1,59 @@
+<section class="settings-page">
+    <header class="hero glass-surface">
+        <div>
+            <span class="eyebrow">Preferences</span>
+            <h1>Appearance and connection</h1>
+            <p>Change the theme and point the client at a different websocket server.</p>
+        </div>
+
+        <div class="hero-chip">
+            <span>Current theme</span>
+            <strong>{{ settingsService.themeLabel() }}</strong>
+        </div>
+    </header>
+
+    <form class="settings-grid" [formGroup]="form" (ngSubmit)="save()">
+        <article class="glass-surface panel">
+            <label for="theme">Theme</label>
+            <p>Choose a visual mode that fits your light or dark environment.</p>
+
+            <select id="theme" formControlName="theme">
+                @for (option of themeOptions; track option.value) {
+                    <option [value]="option.value">{{ option.label }} - {{ option.description }}</option>
+                }
+            </select>
+
+            @if (form.controls.theme.invalid && form.controls.theme.touched) {
+                <span class="error">Select a valid theme mode.</span>
+            }
+        </article>
+
+        <article class="glass-surface panel">
+            <label for="websocketUrl">Websocket URL</label>
+            <p>Update the connection target if the server is running somewhere else.</p>
+
+            <input
+                id="websocketUrl"
+                type="url"
+                formControlName="websocketUrl"
+                placeholder="ws://localhost:21234"
+                autocomplete="off"
+                spellcheck="false"
+            />
+
+            @if (form.controls.websocketUrl.invalid && form.controls.websocketUrl.touched) {
+                <span class="error">Enter a valid websocket URL starting with ws:// or wss://.</span>
+            }
+
+            <div class="inline-hint">
+                <span>Current</span>
+                <strong>{{ settingsService.websocketUrl() }}</strong>
+            </div>
+        </article>
+
+        <footer class="actions glass-surface">
+            <button type="button" class="secondary" (click)="reset()">Reset defaults</button>
+            <button type="submit" class="primary">Save settings</button>
+        </footer>
+    </form>
+</section>
